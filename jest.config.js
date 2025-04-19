@@ -5,12 +5,9 @@ module.exports = {
   roots: ['<rootDir>/lambdas'],
   testMatch: ['**/*.test.ts'],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
-  },
-  globals: {
-    'ts-jest': {
-      isolatedModules: true,
-    },
+    '^.+\\.ts$': ['ts-jest', {
+      // ts-jest 配置
+    }],
   },
   // Commented out to isolate issue
   // setupFiles: ['<rootDir>/test/setup.ts'],
