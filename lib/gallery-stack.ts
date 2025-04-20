@@ -137,11 +137,6 @@ export class GalleryStack extends cdk.Stack {
       s3.EventType.OBJECT_CREATED_COPY,
       new s3n.LambdaDestination(logImageFn)
     );
-
-    imageBucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(removeImageFn)
-    );
     
     // Add SNS Topic subscriptions with filters
     imageTopic.addSubscription(
