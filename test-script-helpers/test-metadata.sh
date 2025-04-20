@@ -9,7 +9,7 @@ else
 fi
 
 # 检查必要的环境变量
-if [ -z "$TOPIC_ARN" ] || [ -z "$TABLE_NAME" ]; then
+if [ -z "$TOPIC_ARN" ] || [ -z "$TABLE_NAME" ] || [ -z "$BUCKET_NAME" ]; then
     echo "Error: Required environment variables not set"
     exit 1
 fi
@@ -56,10 +56,35 @@ EOF
 EOF
 }
 
-# 清理临时文件
+# 清理临时文件和 S3 对象
 cleanup() {
     rm -f message.json attributes.json
+    echo "Cleaning up test image from S3..."
+    aws s3 rm s3://$BUCKET_NAME/test-image.png
     print_success "Cleanup completed"
+}
+
+# 上传测试图片
+upload_test_image() {
+    echo "Uploading test image to S3..."
+    if aws s3 cp ../images/test-image.png s3://$BUCKET_NAME/; then
+        print_success "Image uploaded successfully"
+        # 等待 Lambda 处理
+        echo "Waiting for Lambda to process the image..."
+        sleep 10
+    else
+        print_error "Failed to upload image"
+        return 1
+    fi
+}
+
+# 获取并显示 DynamoDB 记录
+get_dynamodb_record() {
+    echo "Current DynamoDB record:"
+    aws dynamodb get-item \
+        --table-name "$TABLE_NAME" \
+        --key "{\"id\": {\"S\": \"test-image.png\"}}" \
+        --output json
 }
 
 # 测试添加元数据
@@ -89,6 +114,8 @@ test_add_metadata() {
     
     # 检查 DynamoDB 中的记录
     echo "Checking DynamoDB record..."
+    get_dynamodb_record
+    
     if aws dynamodb get-item \
         --table-name "$TABLE_NAME" \
         --key "{\"id\": {\"S\": \"test-image.png\"}}" \
@@ -107,23 +134,37 @@ main() {
     # 确保在脚本退出时清理
     trap cleanup EXIT
     
+    # 上传测试图片
+    if ! upload_test_image; then
+        print_error "Failed to upload test image"
+        exit 1
+    fi
+    
+    # 显示初始记录
+    echo "Initial DynamoDB record:"
+    get_dynamodb_record
+    
     # 测试添加标题
-    if ! test_add_metadata "Caption" "Olympic 100m final - 2024"; then
+    if ! test_add_metadata "Caption" "Yuzhe Shi"; then
         print_error "Caption test failed"
         exit 1
     fi
     
     # 测试添加日期
-    if ! test_add_metadata "Date" "2024-07-26"; then
+    if ! test_add_metadata "Date" "2025-04-20"; then
         print_error "Date test failed"
         exit 1
     fi
     
     # 测试添加摄影师姓名
-    if ! test_add_metadata "Name" "John Smith"; then
+    if ! test_add_metadata "Name" "Shimizu Nagisa"; then
         print_error "Name test failed"
         exit 1
     fi
+    
+    # 显示最终记录
+    echo "Final DynamoDB record:"
+    get_dynamodb_record
     
     print_success "All metadata tests completed successfully!"
 }

@@ -25,9 +25,19 @@ echo "Publishing status update to SNS topic"
 aws sns publish \
     --topic-arn "$TOPIC_ARN" \
     --message '{
-        "eventType": "status_update",
-        "id": "test-image.png",
-        "status": "approved"
+        "imageId": "test-image.png",
+        "status": "approved",
+        "eventType": "status_update"
+    }' \
+    --message-attributes '{
+        "eventType": {
+            "DataType": "String",
+            "StringValue": "status_update"
+        },
+        "status": {
+            "DataType": "String",
+            "StringValue": "approved"
+        }
     }'
 
 # 4. 等待 Lambda 处理
