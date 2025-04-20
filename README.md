@@ -2,15 +2,33 @@
 
 ## Distributed Systems - Event-Driven Architecture
 
-__Name:__ Yu Zhe
+**Name:** Yuzhe Shi (20108862@mail.wit.ie)
 
-__Demo:__ [YouTube Demo Link]
+**Demo:** [YouTube Demo Link]
 
 This repository contains the implementation of a serverless photo gallery application using an event-driven architecture on AWS. The application is built using AWS CDK for infrastructure provisioning and TypeScript for implementation.
 
 ![](./images/arch.png)
 
-## Project Structure
+## Feature Status
+
+**Feature:**
+
+- Photographer:
+  - Log new Images - Completed and Tested
+  - Metadata updating - Completed and Tested
+  - Invalid image removal - Completed and Tested
+  - Status Update Mailer - Completed and Tested
+- Moderator:
+  - Status updating - Completed and Tested
+
+## Notes
+
+- sns.SubscriptionFilter.stringFilter is used to filter out irrelevant messages. For example, image metadata messages should not appear in the SQS Queue.
+- All Lambda functions are fully tested with Jest
+- To simplify end-to-end testing, 6 test scripts are provided in `test-script-helpers`
+
+### Project Structure
 
 - `bin/` - CDK application entry point
 - `lib/` - CDK stack definitions
@@ -25,18 +43,7 @@ This repository contains the implementation of a serverless photo gallery applic
 - `test-script-helpers/` - Helper scripts for testing
 - `images/` - Architecture diagrams and documentation images
 
-## Feature Status
-
-__Feature:__
-+ Photographer:
-  + Log new Images - Completed and Tested
-  + Metadata updating - Completed and Tested
-  + Invalid image removal - Completed and Tested
-  + Status Update Mailer - Completed and Tested
-+ Moderator:
-  + Status updating - Completed and Tested
-
-## Technical Stack
+### Technical Stack
 
 - AWS CDK for infrastructure as code
 - AWS Lambda for serverless functions
@@ -48,9 +55,10 @@ __Feature:__
 - TypeScript for implementation
 - Jest for testing
 
-## Getting Started
+### Getting Started
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
@@ -58,16 +66,19 @@ npm install
 2. Configure environment variables in `.env` file (`test-script-helpers/.env`,refer to `.env.example`) and `env.ts
 
 3. Deploy the stack:
+
 ```bash
 cdk deploy
 ```
 
 4. Run tests:
+
 ```bash
 npm test
 ```
 
 5. Run the test script:
+
 ```bash
 cd test-script-helpers
 bash test-confirmation-mailer.sh
@@ -76,12 +87,3 @@ bash test-metadata.sh
 bash test-upload-image.sh
 bash test-status-update.sh
 ```
-
-## Notes
-
-- The application uses a dead letter queue (DLQ) for handling failed image processing
-- All Lambda functions are fully tested with Jest
-- The system implements proper error handling and retry mechanisms
-- Email notifications are sent using Amazon SES
-- Image validation is performed during upload
-- To simplify end-to-end testing, 6 test scripts are provided in `test-script-helpers`
