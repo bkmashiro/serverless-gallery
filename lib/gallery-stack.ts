@@ -157,5 +157,36 @@ export class GalleryStack extends cdk.Stack {
         retryAttempts: 3,
       })
     );
+
+    // Output important resource information
+    new cdk.CfnOutput(this, 'ImageBucketName', {
+      value: imageBucket.bucketName,
+      description: 'Name of the S3 bucket for storing images',
+    });
+
+    new cdk.CfnOutput(this, 'ImageTableName', {
+      value: imageTable.tableName,
+      description: 'Name of the DynamoDB table for image metadata',
+    });
+
+    new cdk.CfnOutput(this, 'ImageTopicArn', {
+      value: imageTopic.topicArn,
+      description: 'ARN of the SNS topic for image events',
+    });
+
+    new cdk.CfnOutput(this, 'ImageQueueUrl', {
+      value: imageQueue.queueUrl,
+      description: 'URL of the SQS queue for image processing',
+    });
+
+    new cdk.CfnOutput(this, 'LogImageFunctionName', {
+      value: logImageFn.functionName,
+      description: 'Name of the Lambda function for logging images',
+    });
+
+    new cdk.CfnOutput(this, 'ConfirmationMailerFunctionName', {
+      value: confirmationMailerFn.functionName,
+      description: 'Name of the Lambda function for sending confirmation emails',
+    });
   }
 } 
