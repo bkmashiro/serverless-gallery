@@ -225,6 +225,11 @@ export class GalleryStack extends cdk.Stack {
       description: 'URL of the SQS queue for image processing',
     });
 
+    new cdk.CfnOutput(this, 'ImageDLQUrl', {
+      value: dlq.queueUrl,
+      description: 'URL of the DLQ for image processing',
+    });
+
     new cdk.CfnOutput(this, 'LogImageFunctionName', {
       value: logImageFn.functionName,
       description: 'Name of the Lambda function for logging images',
