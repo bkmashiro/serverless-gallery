@@ -98,7 +98,7 @@ export class GalleryStack extends cdk.Stack {
     imageTopic.addSubscription(
       new subscriptions.SqsSubscription(imageQueue, {
         filterPolicy: {
-          messageType: sns.SubscriptionFilter.stringFilter({
+          eventType: sns.SubscriptionFilter.stringFilter({
             allowlist: ['image-upload'],
           }),
         },
@@ -108,7 +108,7 @@ export class GalleryStack extends cdk.Stack {
     imageTopic.addSubscription(
       new subscriptions.LambdaSubscription(addMetadataFn, {
         filterPolicy: {
-          messageType: sns.SubscriptionFilter.stringFilter({
+          eventType: sns.SubscriptionFilter.stringFilter({
             allowlist: ['metadata-update'],
           }),
         },
@@ -118,8 +118,24 @@ export class GalleryStack extends cdk.Stack {
     imageTopic.addSubscription(
       new subscriptions.LambdaSubscription(updateStatusFn, {
         filterPolicy: {
-          messageType: sns.SubscriptionFilter.stringFilter({
-            allowlist: ['status-update'],
+          eventType: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['status_update'],
+          }),
+          status: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['approved', 'rejected'],
+          }),
+        },
+      })
+    );
+
+    imageTopic.addSubscription(
+      new subscriptions.LambdaSubscription(confirmationMailerFn, {
+        filterPolicy: {
+          eventType: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['notification'],
+          }),
+          notificationType: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['email'],
           }),
         },
       })
