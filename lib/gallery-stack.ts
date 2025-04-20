@@ -136,7 +136,7 @@ export class GalleryStack extends cdk.Stack {
     );
 
     imageBucket.addEventNotification(
-      s3.EventType.OBJECT_REMOVED,
+      s3.EventType.OBJECT_CREATED,
       new s3n.LambdaDestination(removeImageFn)
     );
     
