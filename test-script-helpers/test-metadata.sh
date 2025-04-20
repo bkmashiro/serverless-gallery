@@ -47,6 +47,10 @@ EOF
     "metadata_type": {
         "DataType": "String",
         "StringValue": "$metadata_type"
+    },
+    "eventType": {
+        "DataType": "String",
+        "StringValue": "metadata-update"
     }
 }
 EOF
@@ -81,7 +85,7 @@ test_add_metadata() {
     
     # 等待 Lambda 处理
     echo "Waiting for Lambda to process the metadata..."
-    sleep 5
+    sleep 10
     
     # 检查 DynamoDB 中的记录
     echo "Checking DynamoDB record..."

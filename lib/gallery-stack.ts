@@ -59,6 +59,9 @@ export class GalleryStack extends cdk.Stack {
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     const removeImageFn = new nodeLambda.NodejsFunction(this, 'RemoveImageFunction', {
@@ -68,6 +71,9 @@ export class GalleryStack extends cdk.Stack {
       environment: {
         BUCKET_NAME: imageBucket.bucketName,
       },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     const addMetadataFn = new nodeLambda.NodejsFunction(this, 'AddMetadataFunction', {
@@ -77,6 +83,9 @@ export class GalleryStack extends cdk.Stack {
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     const updateStatusFn = new nodeLambda.NodejsFunction(this, 'UpdateStatusFunction', {
@@ -86,6 +95,9 @@ export class GalleryStack extends cdk.Stack {
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     const confirmationMailerFn = new nodeLambda.NodejsFunction(this, 'ConfirmationMailerFunction', {
@@ -95,6 +107,9 @@ export class GalleryStack extends cdk.Stack {
       environment: {
         FROM_EMAIL: 'your-verified-email@example.com',
       },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
     });
 
     // Grant permissions
@@ -104,10 +119,25 @@ export class GalleryStack extends cdk.Stack {
     imageTable.grantReadWriteData(addMetadataFn);
     imageTable.grantReadWriteData(updateStatusFn);
     
-    // Configure S3 event notification
+    // Configure S3 event notification with specific event types
     imageBucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
+      s3.EventType.OBJECT_CREATED_PUT,
       new s3n.LambdaDestination(logImageFn)
+    );
+
+    imageBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED_POST,
+      new s3n.LambdaDestination(logImageFn)
+    );
+
+    imageBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED_COPY,
+      new s3n.LambdaDestination(logImageFn)
+    );
+
+    imageBucket.addEventNotification(
+      s3.EventType.OBJECT_REMOVED,
+      new s3n.LambdaDestination(removeImageFn)
     );
     
     // Add SNS Topic subscriptions with filters

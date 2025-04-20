@@ -5,6 +5,11 @@ export interface ImageMetadata {
     caption?: string;     // Photo caption
     status?: string;      // Pass or Reject
     reason?: string;      // Reason for status decision
+    metadata: {
+        caption?: string;
+        date?: string;
+        name?: string;
+    };
 }
 
 export interface MetadataMessage {

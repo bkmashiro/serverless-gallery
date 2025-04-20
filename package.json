@@ -10,7 +10,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "cdk": "cdk",
-    "destroy": "cdk destroy"
+    "up": "cdk deploy --require-approval never",
+    "destroy": "cdk destroy --require-approval never"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.147",
