@@ -1,36 +1,87 @@
-## Distributed Systems - Event-Driven Architecture.
+# Serverless Photo Gallery
 
-__Name:__ ....your name .....
+## Distributed Systems - Event-Driven Architecture
 
-__Demo__: ....URL of YouTube demo ......
+__Name:__ Yu Zhe
 
-This repository contains the implementation of a skeleton design for an application that manages a photo gallery, illustrated below. The app uses an event-driven architecture and is deployed on the AWS platform using the CDK framework for infrastructure provisioning.
+__Demo:__ [YouTube Demo Link]
+
+This repository contains the implementation of a serverless photo gallery application using an event-driven architecture on AWS. The application is built using AWS CDK for infrastructure provisioning and TypeScript for implementation.
 
 ![](./images/arch.png)
 
-### Code Status.
+## Project Structure
 
-[Advice: In this section, state the status of your submission for each feature listed below. The status options are: (1) Completed & Tested; (2) Attempted (i.e. partially works); (3) Not Attempted. Option (1) implies the feature performs the required action (e.g. updates the table) __only when appropriate__, as dictated by the relevant filtering policy described in the specification.]
+- `bin/` - CDK application entry point
+- `lib/` - CDK stack definitions
+- `lambdas/` - AWS Lambda function implementations
+  - `add-metadata/` - Handles image metadata updates
+  - `confirmation-mailer/` - Sends email notifications
+  - `log-image/` - Processes new image uploads
+  - `remove-image/` - Handles invalid image removal
+  - `update-status/` - Updates image status
+- `shared/` - Shared types and utilities
+- `test/` - Integration tests
+- `test-script-helpers/` - Helper scripts for testing
+- `images/` - Architecture diagrams and documentation images
+
+## Feature Status
 
 __Feature:__
 + Photographer:
-  + Log new Images
-  + Metadata updating
-  + Invalid image removal  
-  + Status Update Mailer
-+ Moderator
-  + Status updating
-
-]e.g. 
-
-__Feature:__
-+ Photographer:
-  + Log new Images - Completed and Tested.
-  + Metadata updating - Not Attempted
+  + Log new Images - Completed and Tested
+  + Metadata updating - Completed and Tested
   + Invalid image removal - Completed and Tested
-  + Status Update Mailer - Attempted.
-+ etc
+  + Status Update Mailer - Completed and Tested
++ Moderator:
+  + Status updating - Completed and Tested
 
-### Notes (Optional)
+## Technical Stack
 
-[Any additional information about your solution you wish to draw attention to.]
+- AWS CDK for infrastructure as code
+- AWS Lambda for serverless functions
+- Amazon S3 for image storage
+- Amazon DynamoDB for metadata storage
+- Amazon SQS for message queuing
+- Amazon SNS for notifications
+- Amazon SES for email delivery
+- TypeScript for implementation
+- Jest for testing
+
+## Getting Started
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Configure environment variables in `.env` file (`test-script-helpers/.env`,refer to `.env.example`) and `env.ts
+
+3. Deploy the stack:
+```bash
+cdk deploy
+```
+
+4. Run tests:
+```bash
+npm test
+```
+
+5. Run the test script:
+```bash
+cd test-script-helpers
+bash test-confirmation-mailer.sh
+bash test-invalid-image.sh
+bash test-metadata.sh
+bash test-upload-image.sh
+bash test-status-update.sh
+```
+
+## Notes
+
+- The application uses a dead letter queue (DLQ) for handling failed image processing
+- All Lambda functions are fully tested with Jest
+- The system implements proper error handling and retry mechanisms
+- Email notifications are sent using Amazon SES
+- Image validation is performed during upload
+- To simplify end-to-end testing, 6 test scripts are provided in `test-script-helpers`
