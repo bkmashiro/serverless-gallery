@@ -1,10 +1,10 @@
 import { S3Event, Context } from 'aws-lambda';
-import { DynamoDB, S3, Lambda } from 'aws-sdk';
+import * as AWS from 'aws-sdk';
 import { ImageMetadata } from '../../shared/types';
 
-const dynamodb = new DynamoDB.DocumentClient();
-const s3 = new S3();
-const lambda = new Lambda();
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+const s3 = new AWS.S3();
+const lambda = new AWS.Lambda();
 
 export const isValidImageType = (fileName: string): boolean => {
   const validExtensions = ['.jpeg', '.jpg', '.png'];

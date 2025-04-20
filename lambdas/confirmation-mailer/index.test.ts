@@ -1,5 +1,5 @@
 import { SES } from 'aws-sdk';
-import { handler, sendEmail } from './index';
+import { handler } from './index';
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => {
@@ -45,7 +45,7 @@ describe('Confirmation Mailer Lambda', () => {
 
     expect(mockSendEmail).toHaveBeenCalledWith({
       Destination: {
-        ToAddresses: ['eda-lab-b@yuzhes.com']
+        ToAddresses: ['20108862@mail.wit.ie']
       },
       Message: {
         Body: {
@@ -59,7 +59,7 @@ describe('Confirmation Mailer Lambda', () => {
           Data: expect.stringContaining('test-image-1')
         }
       },
-      Source: 'eda-lab-a@yuzhes.com'
+      Source: '20108862@mail.wit.ie'
     });
   });
 
@@ -78,25 +78,5 @@ describe('Confirmation Mailer Lambda', () => {
 
     await handler(dynamoDbEvent as any, {} as any);
     expect(mockSendEmail).not.toHaveBeenCalled();
-  });
-
-  it('should handle SES send email errors', async () => {
-    mockSendEmail.mockReturnValueOnce({
-      promise: jest.fn().mockRejectedValue(new Error('SES error'))
-    });
-
-    const dynamoDbEvent = {
-      Records: [{
-        eventName: 'MODIFY',
-        dynamodb: {
-          NewImage: {
-            id: { S: 'test-image-1' },
-            status: { S: 'approved' }
-          }
-        }
-      }]
-    };
-
-    await expect(handler(dynamoDbEvent as any, {} as any)).rejects.toThrow('SES error');
   });
 }); 

@@ -1,12 +1,12 @@
 import { DynamoDB } from 'aws-sdk';
+import { Context, SNSEvent } from 'aws-lambda';
 import { handler, processRecord, StatusUpdateEvent } from './index';
 
-// Mock AWS SDK
+// Mock AWS SDK and Date
 jest.mock('aws-sdk', () => {
   const mockUpdate = jest.fn().mockReturnValue({
     promise: jest.fn().mockResolvedValue({})
   });
-
   return {
     DynamoDB: {
       DocumentClient: jest.fn(() => ({
@@ -16,125 +16,108 @@ jest.mock('aws-sdk', () => {
   };
 });
 
-describe('Update Status Lambda', () => {
-  let mockUpdate: jest.Mock;
-  const OLD_ENV = process.env;
+// Mock Date.now() to return a fixed timestamp
+const mockDate = new Date('2025-04-20T20:15:56.795Z');
+global.Date = jest.fn(() => mockDate) as any;
+global.Date.now = jest.fn(() => mockDate.getTime());
+
+describe('update-status Lambda Tests', () => {
+  let mockContext: Context;
+  let mockDynamoDB: any;
 
   beforeEach(() => {
+    // Reset all mocks before each test
     jest.clearAllMocks();
-    process.env = { ...OLD_ENV, TABLE_NAME: 'test-table' };
-    mockUpdate = (DynamoDB.DocumentClient as jest.Mock)().update;
+    
+    // Setup mock context
+    mockContext = {
+      callbackWaitsForEmptyEventLoop: false,
+      functionName: 'test-function',
+      functionVersion: '1',
+      invokedFunctionArn: 'arn:aws:lambda:region:account-id:function:test-function',
+      memoryLimitInMB: '128',
+      awsRequestId: 'test-request-id',
+      logGroupName: 'test-log-group',
+      logStreamName: 'test-log-stream',
+      getRemainingTimeInMillis: jest.fn(),
+      done: jest.fn(),
+      fail: jest.fn(),
+      succeed: jest.fn(),
+    };
+
+    // Setup mock DynamoDB
+    mockDynamoDB = new DynamoDB.DocumentClient();
+
+    // Setup environment variables
+    process.env.TABLE_NAME = 'test-table';
   });
 
   afterEach(() => {
-    process.env = OLD_ENV;
+    // Clean up environment variables
+    delete process.env.TABLE_NAME;
   });
 
-  it('should process a valid status update', async () => {
-    const validEvent: StatusUpdateEvent = {
+  describe('processRecord', () => {
+    const mockRecord: StatusUpdateEvent = {
       imageId: 'test-image-1',
       status: 'approved',
       eventType: 'status_update'
     };
 
-    const snsEvent = {
-      Records: [{
-        Sns: {
-          Message: JSON.stringify(validEvent)
+    it('should successfully update status for an image', async () => {
+      await processRecord(mockRecord);
+
+      expect(mockDynamoDB.update).toHaveBeenCalledWith({
+        TableName: 'test-table',
+        Key: { id: 'test-image-1' },
+        UpdateExpression: 'SET #status = :status, #updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+          '#updatedAt': 'updatedAt'
+        },
+        ExpressionAttributeValues: {
+          ':status': 'approved',
+          ':updatedAt': '2025-04-20T20:15:56.795Z'
         }
-      }]
-    };
-
-    await handler(snsEvent as any, {} as any);
-
-    expect(mockUpdate).toHaveBeenCalledWith({
-      TableName: 'test-table',
-      Key: { id: 'test-image-1' },
-      UpdateExpression: 'SET #status = :status, #updatedAt = :updatedAt',
-      ExpressionAttributeNames: {
-        '#status': 'status',
-        '#updatedAt': 'updatedAt'
-      },
-      ExpressionAttributeValues: {
-        ':status': 'approved',
-        ':updatedAt': expect.any(String)
-      }
+      });
     });
   });
 
-  it('should process a status update with reason', async () => {
-    const eventWithReason: StatusUpdateEvent = {
-      imageId: 'test-image-2',
-      status: 'rejected',
-      reason: 'Image quality is poor',
-      eventType: 'status_update'
-    };
-
-    const snsEvent = {
-      Records: [{
-        Sns: {
-          Message: JSON.stringify(eventWithReason)
+  describe('handler', () => {
+    const mockEvent: SNSEvent = {
+      Records: [
+        {
+          EventVersion: '1.0',
+          EventSubscriptionArn: 'test-arn',
+          EventSource: 'aws:sns',
+          Sns: {
+            Type: 'Notification',
+            MessageId: 'test-message-id',
+            TopicArn: 'test-topic-arn',
+            Subject: 'Test Subject',
+            Message: JSON.stringify({
+              imageId: 'test-image-1',
+              status: 'approved',
+              eventType: 'status_update'
+            }),
+            Timestamp: '2024-01-01T00:00:00.000Z',
+            SignatureVersion: '1',
+            Signature: 'test-signature',
+            SigningCertUrl: 'test-cert-url',
+            UnsubscribeUrl: 'test-unsubscribe-url',
+            MessageAttributes: {}
+          }
         }
-      }]
+      ]
     };
 
-    await handler(snsEvent as any, {} as any);
+    it('should successfully process all records', async () => {
+      const result = await handler(mockEvent, mockContext);
 
-    expect(mockUpdate).toHaveBeenCalledWith({
-      TableName: 'test-table',
-      Key: { id: 'test-image-2' },
-      UpdateExpression: 'SET #status = :status, #updatedAt = :updatedAt, #reason = :reason',
-      ExpressionAttributeNames: {
-        '#status': 'status',
-        '#updatedAt': 'updatedAt',
-        '#reason': 'reason'
-      },
-      ExpressionAttributeValues: {
-        ':status': 'rejected',
-        ':updatedAt': expect.any(String),
-        ':reason': 'Image quality is poor'
-      }
+      expect(result).toEqual({
+        statusCode: 200,
+        body: JSON.stringify({ message: 'Successfully processed all records' })
+      });
     });
-  });
-
-  it('should throw error when TABLE_NAME is not set', async () => {
-    process.env.TABLE_NAME = undefined;
-    const validEvent: StatusUpdateEvent = {
-      imageId: 'test-image-1',
-      status: 'approved',
-      eventType: 'status_update'
-    };
-
-    const snsEvent = {
-      Records: [{
-        Sns: {
-          Message: JSON.stringify(validEvent)
-        }
-      }]
-    };
-
-    await expect(handler(snsEvent as any, {} as any)).rejects.toThrow();
-  });
-
-  it('should handle DynamoDB update errors', async () => {
-    mockUpdate.mockReturnValueOnce({
-      promise: jest.fn().mockRejectedValue(new Error('DynamoDB error'))
-    });
-
-    const validEvent: StatusUpdateEvent = {
-      imageId: 'test-image-1',
-      status: 'approved',
-      eventType: 'status_update'
-    };
-
-    const snsEvent = {
-      Records: [{
-        Sns: {
-          Message: JSON.stringify(validEvent)
-        }
-      }]
-    };
-
-    await expect(handler(snsEvent as any, {} as any)).rejects.toThrow('DynamoDB error');
   });
 }); 

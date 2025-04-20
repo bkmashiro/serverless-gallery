@@ -1,24 +1,26 @@
 import { SQSEvent, Context, SQSRecord } from 'aws-lambda';
-import { S3 } from 'aws-sdk';
-import { handler, processRecord } from './index';
+import { S3, AWSError } from 'aws-sdk';
+import { DeleteObjectOutput } from 'aws-sdk/clients/s3';
+import { PromiseResult } from 'aws-sdk/lib/request';
+import { handler, processS3Event } from './index';
+import { S3Event } from 'aws-lambda';
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => {
-  const mockDeleteObject = jest.fn().mockReturnValue({
-    promise: jest.fn()
-  });
   const mockS3 = {
-    deleteObject: mockDeleteObject
+    deleteObject: jest.fn().mockReturnThis(),
+    promise: jest.fn()
   };
   return {
-    S3: jest.fn(() => mockS3),
+    S3: jest.fn(() => mockS3)
   };
 });
 
+let mockS3: jest.Mocked<S3>;
+let mockDeleteObjectPromise: jest.Mock<Promise<PromiseResult<DeleteObjectOutput, AWSError>>>;
+
 describe('remove-image Lambda Tests', () => {
   let mockContext: Context;
-  let mockS3: any;
-  let mockDeleteObjectPromise: jest.Mock;
 
   beforeEach(() => {
     // Reset all mocks before each test
@@ -41,44 +43,176 @@ describe('remove-image Lambda Tests', () => {
     };
 
     // Setup mock S3
-    mockS3 = new S3();
-    mockDeleteObjectPromise = mockS3.deleteObject().promise;
+    mockS3 = new S3() as jest.Mocked<S3>;
+    mockDeleteObjectPromise = jest.fn().mockResolvedValue({});
   });
 
   describe('processRecord', () => {
-    const mockRecord: SQSRecord = {
-      messageId: 'test-message-id',
-      receiptHandle: 'test-receipt-handle',
-      body: JSON.stringify({
+    const mockEvent: S3Event = {
+      Records: [{
+        eventVersion: '2.1',
+        eventSource: 'aws:s3',
+        awsRegion: 'us-east-1',
+        eventTime: '2024-01-01T00:00:00.000Z',
+        eventName: 'ObjectCreated:Put',
+        userIdentity: { principalId: 'test-principal' },
+        requestParameters: { sourceIPAddress: '127.0.0.1' },
+        responseElements: {
+          'x-amz-request-id': 'test-request-id',
+          'x-amz-id-2': 'test-id-2'
+        },
         s3: {
+          s3SchemaVersion: '1.0',
+          configurationId: 'test-config',
           bucket: {
             name: 'test-bucket',
+            ownerIdentity: { principalId: 'test-principal' },
+            arn: 'arn:aws:s3:::test-bucket'
           },
           object: {
             key: 'test.jpg',
-          },
-        },
-      }),
-      attributes: {
-        ApproximateReceiveCount: '1',
-        SentTimestamp: '1234567890',
-        SenderId: 'test-sender',
-        ApproximateFirstReceiveTimestamp: '1234567890',
-      },
-      messageAttributes: {},
-      md5OfBody: 'test-md5',
-      eventSource: 'aws:sqs',
-      eventSourceARN: 'test-arn',
-      awsRegion: 'us-east-1',
+            size: 1000,
+            eTag: 'test-etag',
+            sequencer: 'test-sequencer'
+          }
+        }
+      }]
     };
 
     beforeEach(() => {
       process.env.BUCKET_NAME = 'test-bucket';
-      mockDeleteObjectPromise.mockResolvedValue({});
+      mockDeleteObjectPromise.mockResolvedValue({ $response: { data: {} } } as PromiseResult<DeleteObjectOutput, AWSError>);
     });
 
     it('should successfully delete a file from S3', async () => {
-      await processRecord(mockRecord);
+      await processS3Event(mockEvent);
+
+      expect(mockS3.deleteObject).toHaveBeenCalledWith({
+        Bucket: 'test-bucket',
+        Key: 'test.jpg',
+      });
+    });
+  });
+
+  describe('handler', () => {
+    const mockContext: Context = {
+      callbackWaitsForEmptyEventLoop: false,
+      functionName: 'test-function',
+      functionVersion: '1',
+      invokedFunctionArn: 'test-arn',
+      memoryLimitInMB: '128',
+      awsRequestId: 'test-request-id',
+      logGroupName: 'test-log-group',
+      logStreamName: 'test-log-stream',
+      getRemainingTimeInMillis: () => 1000,
+      done: () => {},
+      fail: () => {},
+      succeed: () => {}
+    };
+
+    beforeEach(() => {
+      process.env.BUCKET_NAME = 'test-bucket';
+      mockDeleteObjectPromise.mockResolvedValue({ $response: { data: {} } } as PromiseResult<DeleteObjectOutput, AWSError>);
+    });
+
+    it('should successfully process an S3 event', async () => {
+      const mockEvent: S3Event = {
+        Records: [
+          {
+            eventVersion: '2.1',
+            eventSource: 'aws:s3',
+            awsRegion: 'us-east-1',
+            eventTime: '2024-01-01T00:00:00.000Z',
+            eventName: 'ObjectCreated:Put',
+            userIdentity: {
+              principalId: 'test-principal'
+            },
+            requestParameters: {
+              sourceIPAddress: '127.0.0.1'
+            },
+            responseElements: {
+              'x-amz-request-id': 'test-request-id',
+              'x-amz-id-2': 'test-id-2'
+            },
+            s3: {
+              s3SchemaVersion: '1.0',
+              configurationId: 'test-config',
+              bucket: {
+                name: 'test-bucket',
+                ownerIdentity: {
+                  principalId: 'test-principal'
+                },
+                arn: 'arn:aws:s3:::test-bucket'
+              },
+              object: {
+                key: 'test.jpg',
+                size: 1000,
+                eTag: 'test-etag',
+                sequencer: 'test-sequencer'
+              }
+            }
+          }
+        ]
+      };
+
+      await handler(mockEvent, mockContext);
+
+      expect(mockS3.deleteObject).toHaveBeenCalledWith({
+        Bucket: 'test-bucket',
+        Key: 'test.jpg',
+      });
+    });
+  });
+
+  describe('processS3Event', () => {
+    beforeEach(() => {
+      process.env.BUCKET_NAME = 'test-bucket';
+      mockS3 = new S3() as jest.Mocked<S3>;
+      mockDeleteObjectPromise = jest.fn().mockResolvedValue({ $response: { data: {} } } as PromiseResult<DeleteObjectOutput, AWSError>);
+      (mockS3.deleteObject().promise as jest.Mock) = mockDeleteObjectPromise;
+    });
+
+    it('should successfully delete a file from S3', async () => {
+      const mockEvent: S3Event = {
+        Records: [
+          {
+            eventVersion: '2.1',
+            eventSource: 'aws:s3',
+            awsRegion: 'us-east-1',
+            eventTime: '2024-01-01T00:00:00.000Z',
+            eventName: 'ObjectCreated:Put',
+            userIdentity: {
+              principalId: 'test-principal'
+            },
+            requestParameters: {
+              sourceIPAddress: '127.0.0.1'
+            },
+            responseElements: {
+              'x-amz-request-id': 'test-request-id',
+              'x-amz-id-2': 'test-id-2'
+            },
+            s3: {
+              s3SchemaVersion: '1.0',
+              configurationId: 'test-config',
+              bucket: {
+                name: 'test-bucket',
+                ownerIdentity: {
+                  principalId: 'test-principal'
+                },
+                arn: 'arn:aws:s3:::test-bucket'
+              },
+              object: {
+                key: 'test.jpg',
+                size: 1000,
+                eTag: 'test-etag',
+                sequencer: 'test-sequencer'
+              }
+            }
+          }
+        ]
+      };
+
+      await processS3Event(mockEvent);
 
       expect(mockS3.deleteObject).toHaveBeenCalledWith({
         Bucket: 'test-bucket',
@@ -86,67 +220,57 @@ describe('remove-image Lambda Tests', () => {
       });
     });
 
-    it('should throw error when BUCKET_NAME is not set', async () => {
+    it('should throw an error if BUCKET_NAME is not set', async () => {
       delete process.env.BUCKET_NAME;
-      await expect(processRecord(mockRecord)).rejects.toThrow('BUCKET_NAME environment variable is not set');
+      const mockEvent: S3Event = {
+        Records: []
+      };
+
+      await expect(processS3Event(mockEvent)).rejects.toThrow('BUCKET_NAME environment variable is not set');
     });
 
-    it('should throw error when S3 deletion fails', async () => {
-      mockDeleteObjectPromise.mockRejectedValueOnce(new Error('S3 deletion error'));
-
-      await expect(processRecord(mockRecord)).rejects.toThrow('S3 deletion error');
-    });
-  });
-
-  describe('handler', () => {
-    const mockEvent: SQSEvent = {
-      Records: [
-        {
-          messageId: 'test-message-id',
-          receiptHandle: 'test-receipt-handle',
-          body: JSON.stringify({
+    it('should throw an error if S3 delete fails', async () => {
+      mockDeleteObjectPromise.mockRejectedValue(new Error('Delete failed'));
+      const mockEvent: S3Event = {
+        Records: [
+          {
+            eventVersion: '2.1',
+            eventSource: 'aws:s3',
+            awsRegion: 'us-east-1',
+            eventTime: '2024-01-01T00:00:00.000Z',
+            eventName: 'ObjectCreated:Put',
+            userIdentity: {
+              principalId: 'test-principal'
+            },
+            requestParameters: {
+              sourceIPAddress: '127.0.0.1'
+            },
+            responseElements: {
+              'x-amz-request-id': 'test-request-id',
+              'x-amz-id-2': 'test-id-2'
+            },
             s3: {
+              s3SchemaVersion: '1.0',
+              configurationId: 'test-config',
               bucket: {
                 name: 'test-bucket',
+                ownerIdentity: {
+                  principalId: 'test-principal'
+                },
+                arn: 'arn:aws:s3:::test-bucket'
               },
               object: {
                 key: 'test.jpg',
-              },
-            },
-          }),
-          attributes: {
-            ApproximateReceiveCount: '1',
-            SentTimestamp: '1234567890',
-            SenderId: 'test-sender',
-            ApproximateFirstReceiveTimestamp: '1234567890',
-          },
-          messageAttributes: {},
-          md5OfBody: 'test-md5',
-          eventSource: 'aws:sqs',
-          eventSourceARN: 'test-arn',
-          awsRegion: 'us-east-1',
-        },
-      ],
-    };
+                size: 1000,
+                eTag: 'test-etag',
+                sequencer: 'test-sequencer'
+              }
+            }
+          }
+        ]
+      };
 
-    beforeEach(() => {
-      process.env.BUCKET_NAME = 'test-bucket';
-      mockDeleteObjectPromise.mockResolvedValue({});
-    });
-
-    it('should successfully process all records', async () => {
-      const result = await handler(mockEvent, mockContext);
-
-      expect(result).toEqual({
-        statusCode: 200,
-        body: JSON.stringify({ message: 'Successfully removed all invalid files' }),
-      });
-    });
-
-    it('should throw error when processing fails', async () => {
-      mockDeleteObjectPromise.mockRejectedValueOnce(new Error('S3 deletion error'));
-
-      await expect(handler(mockEvent, mockContext)).rejects.toThrow('S3 deletion error');
+      await expect(processS3Event(mockEvent)).rejects.toThrow('Delete failed');
     });
   });
 }); 

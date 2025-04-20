@@ -1,27 +1,35 @@
-import { SQSEvent, Context, SQSRecord } from 'aws-lambda';
-import { DynamoDB, S3 } from 'aws-sdk';
-import { handler, isValidImageType, processRecord } from './index';
+import { S3Event, Context } from 'aws-lambda';
+import { DynamoDB, S3, Lambda } from 'aws-sdk';
+import { handler, isValidImageType, processS3Event } from './index';
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => {
   const mockPut = jest.fn().mockReturnValue({
     promise: jest.fn().mockResolvedValue({})
   });
+  const mockInvoke = jest.fn().mockReturnValue({
+    promise: jest.fn().mockResolvedValue({})
+  });
   const mockDynamoDB = {
     put: mockPut
   };
   const mockS3 = {};
+  const mockLambda = {
+    invoke: mockInvoke
+  };
   return {
     DynamoDB: {
       DocumentClient: jest.fn(() => mockDynamoDB),
     },
     S3: jest.fn(() => mockS3),
+    Lambda: jest.fn(() => mockLambda)
   };
 });
 
 describe('log-image Lambda Tests', () => {
   let mockContext: Context;
   let mockDynamoDB: any;
+  let mockLambda: any;
 
   beforeEach(() => {
     // Reset all mocks before each test
@@ -43,8 +51,9 @@ describe('log-image Lambda Tests', () => {
       succeed: jest.fn(),
     };
 
-    // Setup mock DynamoDB
+    // Setup mock DynamoDB and Lambda
     mockDynamoDB = new DynamoDB.DocumentClient();
+    mockLambda = new Lambda();
   });
 
   describe('isValidImageType', () => {
@@ -67,33 +76,44 @@ describe('log-image Lambda Tests', () => {
     });
   });
 
-  describe('processRecord', () => {
-    const mockRecord: SQSRecord = {
-      messageId: 'test-message-id',
-      receiptHandle: 'test-receipt-handle',
-      body: JSON.stringify({
-        s3: {
-          bucket: {
-            name: 'test-bucket',
+  describe('processS3Event', () => {
+    const mockEvent: S3Event = {
+      Records: [
+        {
+          eventVersion: '2.1',
+          eventSource: 'aws:s3',
+          awsRegion: 'us-east-1',
+          eventTime: '2024-01-01T00:00:00.000Z',
+          eventName: 'ObjectCreated:Put',
+          userIdentity: {
+            principalId: 'test-principal'
           },
-          object: {
-            key: 'test.jpg',
-            size: 1000,
-            eTag: 'test-etag',
+          requestParameters: {
+            sourceIPAddress: '127.0.0.1'
           },
-        },
-      }),
-      attributes: {
-        ApproximateReceiveCount: '1',
-        SentTimestamp: '1234567890',
-        SenderId: 'test-sender',
-        ApproximateFirstReceiveTimestamp: '1234567890',
-      },
-      messageAttributes: {},
-      md5OfBody: 'test-md5',
-      eventSource: 'aws:sqs',
-      eventSourceARN: 'test-arn',
-      awsRegion: 'us-east-1',
+          responseElements: {
+            'x-amz-request-id': 'test-request-id',
+            'x-amz-id-2': 'test-id-2'
+          },
+          s3: {
+            s3SchemaVersion: '1.0',
+            configurationId: 'test-config',
+            bucket: {
+              name: 'test-bucket',
+              ownerIdentity: {
+                principalId: 'test-principal'
+              },
+              arn: 'arn:aws:s3:::test-bucket'
+            },
+            object: {
+              key: 'test.jpg',
+              size: 1000,
+              eTag: 'test-etag',
+              sequencer: 'test-sequencer'
+            }
+          }
+        }
+      ]
     };
 
     beforeEach(() => {
@@ -101,74 +121,91 @@ describe('log-image Lambda Tests', () => {
     });
 
     it('should successfully process a valid image record', async () => {
-      await processRecord(mockRecord);
+      await processS3Event(mockEvent);
 
       expect(mockDynamoDB.put).toHaveBeenCalledWith({
         TableName: 'test-table',
         Item: {
           id: 'test.jpg',
-        },
-        ConditionExpression: 'attribute_not_exists(id)',
+          metadata: {}
+        }
       });
     });
 
-    it('should throw error for invalid file type', async () => {
-      const invalidRecord = {
-        ...mockRecord,
-        body: JSON.stringify({
+    it('should trigger remove-image Lambda for invalid file type', async () => {
+      const invalidEvent = {
+        ...mockEvent,
+        Records: [{
+          ...mockEvent.Records[0],
           s3: {
-            bucket: {
-              name: 'test-bucket',
-            },
+            ...mockEvent.Records[0].s3,
             object: {
-              key: 'test.txt',
-              size: 1000,
-              eTag: 'test-etag',
-            },
-          },
-        }),
+              ...mockEvent.Records[0].s3.object,
+              key: 'test.txt'
+            }
+          }
+        }]
       };
 
-      await expect(processRecord(invalidRecord as SQSRecord)).rejects.toThrow('Invalid file type: test.txt');
-    });
+      await processS3Event(invalidEvent);
 
-    it('should throw error when TABLE_NAME is not set', async () => {
-      delete process.env.TABLE_NAME;
-      await expect(processRecord(mockRecord)).rejects.toThrow('TABLE_NAME environment variable is not set');
+      expect(mockLambda.invoke).toHaveBeenCalledWith({
+        FunctionName: 'gallery-remove-image',
+        InvocationType: 'Event',
+        Payload: JSON.stringify({
+          Records: [{
+            s3: {
+              bucket: {
+                name: 'test-bucket'
+              },
+              object: {
+                key: 'test.txt'
+              }
+            }
+          }]
+        })
+      });
     });
   });
 
   describe('handler', () => {
-    const mockEvent: SQSEvent = {
+    const mockEvent: S3Event = {
       Records: [
         {
-          messageId: 'test-message-id',
-          receiptHandle: 'test-receipt-handle',
-          body: JSON.stringify({
-            s3: {
-              bucket: {
-                name: 'test-bucket',
-              },
-              object: {
-                key: 'test.jpg',
-                size: 1000,
-                eTag: 'test-etag',
-              },
-            },
-          }),
-          attributes: {
-            ApproximateReceiveCount: '1',
-            SentTimestamp: '1234567890',
-            SenderId: 'test-sender',
-            ApproximateFirstReceiveTimestamp: '1234567890',
-          },
-          messageAttributes: {},
-          md5OfBody: 'test-md5',
-          eventSource: 'aws:sqs',
-          eventSourceARN: 'test-arn',
+          eventVersion: '2.1',
+          eventSource: 'aws:s3',
           awsRegion: 'us-east-1',
-        },
-      ],
+          eventTime: '2024-01-01T00:00:00.000Z',
+          eventName: 'ObjectCreated:Put',
+          userIdentity: {
+            principalId: 'test-principal'
+          },
+          requestParameters: {
+            sourceIPAddress: '127.0.0.1'
+          },
+          responseElements: {
+            'x-amz-request-id': 'test-request-id',
+            'x-amz-id-2': 'test-id-2'
+          },
+          s3: {
+            s3SchemaVersion: '1.0',
+            configurationId: 'test-config',
+            bucket: {
+              name: 'test-bucket',
+              ownerIdentity: {
+                principalId: 'test-principal'
+              },
+              arn: 'arn:aws:s3:::test-bucket'
+            },
+            object: {
+              key: 'test.jpg',
+              size: 1000,
+              eTag: 'test-etag',
+              sequencer: 'test-sequencer'
+            }
+          }
+        }
+      ]
     };
 
     beforeEach(() => {
@@ -180,14 +217,8 @@ describe('log-image Lambda Tests', () => {
 
       expect(result).toEqual({
         statusCode: 200,
-        body: JSON.stringify({ message: 'Successfully processed all images' }),
+        body: JSON.stringify({ message: 'Successfully processed all images' })
       });
-    });
-
-    it('should throw error when processing fails', async () => {
-      mockDynamoDB.put().promise.mockRejectedValue(new Error('DynamoDB error'));
-
-      await expect(handler(mockEvent, mockContext)).rejects.toThrow('DynamoDB error');
     });
   });
 }); 

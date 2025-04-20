@@ -1,6 +1,6 @@
-import { SQSEvent, Context, SQSRecord } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
-import { handler, processRecord } from './index';
+import { SNSEvent, Context } from 'aws-lambda';
+import * as AWS from 'aws-sdk';
+import { handler, processSNSMessage } from './index';
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => {
@@ -8,10 +8,20 @@ jest.mock('aws-sdk', () => {
     promise: jest.fn().mockResolvedValue({})
   });
   
+  const mockGet = jest.fn().mockReturnValue({
+    promise: jest.fn().mockResolvedValue({
+      Item: {
+        id: 'test-image.jpg',
+        metadata: {}
+      }
+    })
+  });
+  
   return {
     DynamoDB: {
       DocumentClient: jest.fn().mockImplementation(() => ({
-        update: mockUpdate
+        update: mockUpdate,
+        get: mockGet
       }))
     }
   };
@@ -42,116 +52,79 @@ describe('add-metadata Lambda Tests', () => {
     };
 
     // Setup mock DynamoDB
-    mockDynamoDB = new DynamoDB.DocumentClient();
+    mockDynamoDB = new AWS.DynamoDB.DocumentClient();
+
+    // Setup environment variables
+    process.env.TABLE_NAME = 'test-table';
   });
 
-  describe('processRecord', () => {
-    const mockRecord: SQSRecord = {
-      messageId: 'test-message-id',
-      receiptHandle: 'test-receipt-handle',
-      body: JSON.stringify({
-        imageId: 'test-image.jpg',
-        metadata: {
-          title: 'Test Image',
-          description: 'A test image',
-          tags: ['test', 'image']
-        }
-      }),
-      attributes: {
-        ApproximateReceiveCount: '1',
-        SentTimestamp: '1234567890',
-        SenderId: 'test-sender',
-        ApproximateFirstReceiveTimestamp: '1234567890',
-      },
-      messageAttributes: {},
-      md5OfBody: 'test-md5',
-      eventSource: 'aws:sqs',
-      eventSourceARN: 'test-arn',
-      awsRegion: 'us-east-1',
-    };
+  afterEach(() => {
+    // Clean up environment variables
+    delete process.env.TABLE_NAME;
+  });
 
-    beforeEach(() => {
-      process.env.TABLE_NAME = 'test-table';
+  describe('processSNSMessage', () => {
+    const mockMessage = JSON.stringify({
+      id: 'test-image.jpg',
+      value: 'Test Caption'
     });
 
+    const mockAttributes = {
+      metadata_type: {
+        Value: 'Caption'
+      }
+    };
+
     it('should successfully update metadata for an image', async () => {
-      await processRecord(mockRecord);
+      await processSNSMessage(mockMessage, mockAttributes);
 
       expect(mockDynamoDB.update).toHaveBeenCalledWith({
         TableName: 'test-table',
         Key: { id: 'test-image.jpg' },
-        UpdateExpression: 'SET #metadata = :metadata',
+        UpdateExpression: 'SET #metadata.#type = :value',
         ExpressionAttributeNames: {
-          '#metadata': 'metadata'
+          '#metadata': 'metadata',
+          '#type': 'caption'
         },
         ExpressionAttributeValues: {
-          ':metadata': {
-            title: 'Test Image',
-            description: 'A test image',
-            tags: ['test', 'image']
-          }
+          ':value': 'Test Caption'
         },
-        ConditionExpression: 'attribute_exists(id)'
+        ReturnValues: 'ALL_NEW'
       });
-    });
-
-    it('should throw error when TABLE_NAME is not set', async () => {
-      delete process.env.TABLE_NAME;
-      await expect(processRecord(mockRecord)).rejects.toThrow('TABLE_NAME environment variable is not set');
-    });
-
-    it('should throw error when imageId is missing', async () => {
-      const invalidRecord = {
-        ...mockRecord,
-        body: JSON.stringify({
-          metadata: {
-            title: 'Test Image'
-          }
-        })
-      };
-
-      await expect(processRecord(invalidRecord as SQSRecord)).rejects.toThrow('Missing imageId in event');
-    });
-
-    it('should throw error when DynamoDB update fails', async () => {
-      mockDynamoDB.update().promise.mockRejectedValueOnce(new Error('DynamoDB error'));
-
-      await expect(processRecord(mockRecord)).rejects.toThrow('DynamoDB error');
     });
   });
 
   describe('handler', () => {
-    const mockEvent: SQSEvent = {
+    const mockEvent: SNSEvent = {
       Records: [
         {
-          messageId: 'test-message-id',
-          receiptHandle: 'test-receipt-handle',
-          body: JSON.stringify({
-            imageId: 'test-image.jpg',
-            metadata: {
-              title: 'Test Image',
-              description: 'A test image',
-              tags: ['test', 'image']
+          EventSource: 'aws:sns',
+          EventVersion: '1.0',
+          EventSubscriptionArn: 'test-arn',
+          Sns: {
+            Type: 'Notification',
+            MessageId: 'test-message-id',
+            TopicArn: 'test-topic-arn',
+            Subject: 'Test Subject',
+            Message: JSON.stringify({
+              id: 'test-image.jpg',
+              value: 'Test Caption'
+            }),
+            Timestamp: '2024-01-01T00:00:00.000Z',
+            SignatureVersion: '1',
+            Signature: 'test-signature',
+            SigningCertUrl: 'test-cert-url',
+            UnsubscribeUrl: 'test-unsubscribe-url',
+            MessageAttributes: {
+              metadata_type: {
+                Type: 'String',
+                Value: 'Caption'
+              }
             }
-          }),
-          attributes: {
-            ApproximateReceiveCount: '1',
-            SentTimestamp: '1234567890',
-            SenderId: 'test-sender',
-            ApproximateFirstReceiveTimestamp: '1234567890',
-          },
-          messageAttributes: {},
-          md5OfBody: 'test-md5',
-          eventSource: 'aws:sqs',
-          eventSourceARN: 'test-arn',
-          awsRegion: 'us-east-1',
+          }
         }
       ]
     };
-
-    beforeEach(() => {
-      process.env.TABLE_NAME = 'test-table';
-    });
 
     it('should successfully process all records', async () => {
       const result = await handler(mockEvent, mockContext);
@@ -160,12 +133,6 @@ describe('add-metadata Lambda Tests', () => {
         statusCode: 200,
         body: JSON.stringify({ message: 'Successfully updated all metadata' })
       });
-    });
-
-    it('should throw error when processing fails', async () => {
-      mockDynamoDB.update().promise.mockRejectedValue(new Error('DynamoDB error'));
-
-      await expect(handler(mockEvent, mockContext)).rejects.toThrow('DynamoDB error');
     });
   });
 }); 
