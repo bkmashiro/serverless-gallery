@@ -119,6 +119,9 @@ export class GalleryStack extends cdk.Stack {
     imageTable.grantReadWriteData(addMetadataFn);
     imageTable.grantReadWriteData(updateStatusFn);
     
+    // Grant Lambda invoke permission
+    removeImageFn.grantInvoke(logImageFn);
+    
     // Configure S3 event notification with specific event types
     imageBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED_PUT,

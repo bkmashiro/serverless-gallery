@@ -1,9 +1,10 @@
 import { S3Event, Context } from 'aws-lambda';
-import { DynamoDB, S3 } from 'aws-sdk';
+import { DynamoDB, S3, Lambda } from 'aws-sdk';
 import { ImageMetadata } from '../../shared/types';
 
 const dynamodb = new DynamoDB.DocumentClient();
 const s3 = new S3();
+const lambda = new Lambda();
 
 export const isValidImageType = (fileName: string): boolean => {
   const validExtensions = ['.jpeg', '.jpg', '.png'];
@@ -35,6 +36,17 @@ export const processS3Event = async (event: S3Event): Promise<void> => {
     
     if (!isValidImageType(fileName)) {
       console.error(`Invalid file type detected: ${fileName}`);
+      // 调用 remove-image Lambda 函数删除无效文件
+      try {
+        await lambda.invoke({
+          FunctionName: 'gallery-remove-image',
+          InvocationType: 'Event',
+          Payload: JSON.stringify(event)
+        }).promise();
+        console.log(`✅ Successfully triggered removal of invalid file: ${fileName}`);
+      } catch (error) {
+        console.error(`❌ Failed to trigger removal of invalid file ${fileName}:`, error);
+      }
       continue;
     }
 
