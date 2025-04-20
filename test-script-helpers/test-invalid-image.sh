@@ -41,10 +41,13 @@ aws lambda invoke \
 echo "Lambda response:"
 cat response.json
 rm response.json
+echo ""
 
 # 6. 检查文件是否已被删除
 echo "Checking if file was removed from S3:"
+echo "=== begin ls s3://$BUCKET_NAME/ ==="
 aws s3 ls s3://$BUCKET_NAME/invalid-image.txt
+echo "=== end ls s3://$BUCKET_NAME/ ==="
 
 # 7. 清理本地文件
 rm invalid-image.txt 
