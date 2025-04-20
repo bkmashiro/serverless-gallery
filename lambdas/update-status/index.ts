@@ -15,8 +15,14 @@ export const processRecord = async (record: StatusUpdateEvent): Promise<void> =>
 
   const { imageId, status, reason } = record;
 
+  const TABLE_NAME = process.env.TABLE_NAME;
+  if (!TABLE_NAME) {
+    console.error('TABLE_NAME environment variable is not set');
+    throw new Error('TABLE_NAME environment variable is not set');
+  }
+
   const params: DynamoDB.DocumentClient.UpdateItemInput = {
-    TableName: process.env.TABLE_NAME!,
+    TableName: TABLE_NAME,
     Key: { id: imageId },
     UpdateExpression: 'SET #status = :status, #updatedAt = :updatedAt',
     ExpressionAttributeNames: {
