@@ -1,16 +1,17 @@
-import { SQSEvent, Context, SQSRecord } from 'aws-lambda';
+import { SNSEvent, Context } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
 import { ImageMetadata } from '../../shared/types';
 
 const dynamodb = new DynamoDB.DocumentClient();
 
-interface MetadataUpdateEvent {
-  imageId: string;
-  metadata: Partial<ImageMetadata>;
+interface MetadataMessage {
+  id: string;
+  value: string;
 }
 
-export const processRecord = async (record: SQSRecord): Promise<void> => {
-  console.log('Processing record:', record.body);
+export const processSNSMessage = async (message: string, attributes: any): Promise<void> => {
+  console.log('Processing SNS message:', message);
+  console.log('Message attributes:', attributes);
   
   const TABLE_NAME = process.env.TABLE_NAME;
   if (!TABLE_NAME) {
@@ -18,41 +19,52 @@ export const processRecord = async (record: SQSRecord): Promise<void> => {
     throw new Error('TABLE_NAME environment variable is not set');
   }
 
-  const event = JSON.parse(record.body) as MetadataUpdateEvent;
-  const { imageId, metadata } = event;
+  const metadataMessage = JSON.parse(message) as MetadataMessage;
+  const { id, value } = metadataMessage;
+  const metadataType = attributes.metadata_type?.StringValue;
 
-  if (!imageId) {
-    console.error('Missing imageId in event');
-    throw new Error('Missing imageId in event');
+  if (!id || !value || !metadataType) {
+    console.error('Missing required fields in message');
+    throw new Error('Missing required fields in message');
   }
 
-  console.log(`Updating metadata for image ${imageId}:`, metadata);
+  // 验证元数据类型
+  const validTypes = ['Caption', 'Date', 'Name'];
+  if (!validTypes.includes(metadataType)) {
+    console.error(`Invalid metadata type: ${metadataType}`);
+    throw new Error(`Invalid metadata type: ${metadataType}`);
+  }
+
+  console.log(`Updating ${metadataType} for image ${id}: ${value}`);
   try {
     // Update the metadata in DynamoDB
     await dynamodb.update({
       TableName: TABLE_NAME,
-      Key: { id: imageId },
-      UpdateExpression: 'SET #metadata = :metadata',
+      Key: { id },
+      UpdateExpression: 'SET #metadata.#type = :value',
       ExpressionAttributeNames: {
-        '#metadata': 'metadata'
+        '#metadata': 'metadata',
+        '#type': metadataType.toLowerCase()
       },
       ExpressionAttributeValues: {
-        ':metadata': metadata
+        ':value': value
       },
       ConditionExpression: 'attribute_exists(id)' // Ensure the image exists
     }).promise();
 
-    console.log(`Successfully updated metadata for image: ${imageId}`);
+    console.log(`Successfully updated ${metadataType} for image: ${id}`);
   } catch (error) {
-    console.error(`Failed to update metadata for image ${imageId}:`, error);
+    console.error(`Failed to update ${metadataType} for image ${id}:`, error);
     throw error;
   }
 };
 
-export const handler = async (event: SQSEvent, context: Context) => {
+export const handler = async (event: SNSEvent, context: Context) => {
   console.log('Processing event:', JSON.stringify(event));
   try {
-    await Promise.all(event.Records.map(processRecord));
+    for (const record of event.Records) {
+      await processSNSMessage(record.Sns.Message, record.Sns.MessageAttributes);
+    }
     
     return {
       statusCode: 200,

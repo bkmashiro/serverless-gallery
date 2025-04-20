@@ -9,6 +9,7 @@ import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as nodeLambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as eventsources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -20,6 +21,7 @@ export class GalleryStack extends cdk.Stack {
     const imageBucket = new s3.Bucket(this, 'ImageBucket', {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+      bucketName: `${this.stackName.toLowerCase()}-gallery-image-bucket`,
     });
 
     // DynamoDB table for storing image metadata
@@ -28,18 +30,21 @@ export class GalleryStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+      tableName: 'gallery-image-table',
     });
 
     // SNS Topic for image events
-    const imageTopic = new sns.Topic(this, 'ImageTopic');
+    const imageTopic = new sns.Topic(this, 'ImageTopic', {
+      topicName: 'gallery-image-topic',
+    });
 
     // SQS Queue and DLQ
     const dlq = new sqs.Queue(this, 'ImageDLQ', {
-      queueName: 'image-dlq',
+      queueName: 'gallery-image-dlq',
     });
 
     const imageQueue = new sqs.Queue(this, 'ImageQueue', {
-      queueName: 'image-queue',
+      queueName: 'gallery-image-queue',
       deadLetterQueue: {
         queue: dlq,
         maxReceiveCount: 3,
@@ -50,6 +55,7 @@ export class GalleryStack extends cdk.Stack {
     const logImageFn = new nodeLambda.NodejsFunction(this, 'LogImageFunction', {
       entry: path.join(__dirname, '../lambdas/log-image/index.ts'),
       handler: 'handler',
+      functionName: 'gallery-log-image',
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
@@ -58,6 +64,7 @@ export class GalleryStack extends cdk.Stack {
     const removeImageFn = new nodeLambda.NodejsFunction(this, 'RemoveImageFunction', {
       entry: path.join(__dirname, '../lambdas/remove-image/index.ts'),
       handler: 'handler',
+      functionName: 'gallery-remove-image',
       environment: {
         BUCKET_NAME: imageBucket.bucketName,
       },
@@ -66,6 +73,7 @@ export class GalleryStack extends cdk.Stack {
     const addMetadataFn = new nodeLambda.NodejsFunction(this, 'AddMetadataFunction', {
       entry: path.join(__dirname, '../lambdas/add-metadata/index.ts'),
       handler: 'handler',
+      functionName: 'gallery-add-metadata',
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
@@ -74,6 +82,7 @@ export class GalleryStack extends cdk.Stack {
     const updateStatusFn = new nodeLambda.NodejsFunction(this, 'UpdateStatusFunction', {
       entry: path.join(__dirname, '../lambdas/update-status/index.ts'),
       handler: 'handler',
+      functionName: 'gallery-update-status',
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
@@ -82,8 +91,9 @@ export class GalleryStack extends cdk.Stack {
     const confirmationMailerFn = new nodeLambda.NodejsFunction(this, 'ConfirmationMailerFunction', {
       entry: path.join(__dirname, '../lambdas/confirmation-mailer/index.ts'),
       handler: 'handler',
+      functionName: 'gallery-confirmation-mailer',
       environment: {
-        FROM_EMAIL: 'your-verified-email@example.com', // Replace with your SES verified email
+        FROM_EMAIL: 'your-verified-email@example.com',
       },
     });
 
@@ -93,6 +103,12 @@ export class GalleryStack extends cdk.Stack {
     imageTable.grantReadWriteData(logImageFn);
     imageTable.grantReadWriteData(addMetadataFn);
     imageTable.grantReadWriteData(updateStatusFn);
+    
+    // Configure S3 event notification
+    imageBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(logImageFn)
+    );
     
     // Add SNS Topic subscriptions with filters
     imageTopic.addSubscription(
