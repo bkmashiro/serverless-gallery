@@ -1,23 +1,32 @@
-import { SNSEvent, Context } from 'aws-lambda';
+import { DynamoDBStreamEvent, Context } from 'aws-lambda';
 import { SES } from 'aws-sdk';
 import { SES_REGION, SES_EMAIL_FROM, SES_EMAIL_TO } from '../../env';
 
 const ses = new SES({ region: SES_REGION });
 
-export interface NotificationEvent {
-  imageId: string;
-  status: 'approved' | 'rejected';
-  email?: string;
-  reason?: string;
-  eventType: 'notification';
-  notificationType: 'email';
-}
+export const sendEmail = async (record: DynamoDBStreamEvent['Records'][0]): Promise<void> => {
+  console.log('Processing DynamoDB record:', record);
 
-export const sendEmail = async (event: NotificationEvent): Promise<void> => {
-  console.log('Sending email notification:', event);
+  if (record.eventName !== 'MODIFY') {
+    console.log('Skipping non-MODIFY event');
+    return;
+  }
 
-  const { imageId, status, reason } = event;
-  const email = event.email || SES_EMAIL_TO;
+  const newImage = record.dynamodb?.NewImage;
+  if (!newImage) {
+    console.log('No new image data found');
+    return;
+  }
+
+  const imageId = newImage.id?.S;
+  const status = newImage.status?.S;
+  const reason = newImage.reason?.S;
+  const email = newImage.email?.S || SES_EMAIL_TO;
+
+  if (!imageId || !status) {
+    console.log('Missing required fields in record');
+    return;
+  }
 
   const subject = `Your image ${imageId} has been ${status}`;
   const body = `
@@ -61,12 +70,11 @@ export const sendEmail = async (event: NotificationEvent): Promise<void> => {
   }
 };
 
-export const handler = async (event: SNSEvent, context: Context) => {
+export const handler = async (event: DynamoDBStreamEvent, context: Context) => {
   console.log('Processing event:', JSON.stringify(event));
 
   try {
-    const records = event.Records.map(record => JSON.parse(record.Sns.Message) as NotificationEvent);
-    await Promise.all(records.map(sendEmail));
+    await Promise.all(event.Records.map(sendEmail));
 
     return {
       statusCode: 200,

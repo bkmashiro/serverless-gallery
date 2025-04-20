@@ -41,7 +41,18 @@ export const processS3Event = async (event: S3Event): Promise<void> => {
         await lambda.invoke({
           FunctionName: 'gallery-remove-image',
           InvocationType: 'Event',
-          Payload: JSON.stringify(event)
+          Payload: JSON.stringify({
+            Records: [{
+              s3: {
+                bucket: {
+                  name: record.s3.bucket.name
+                },
+                object: {
+                  key: fileName
+                }
+              }
+            }]
+          })
         }).promise();
         console.log(`✅ Successfully triggered removal of invalid file: ${fileName}`);
       } catch (error) {

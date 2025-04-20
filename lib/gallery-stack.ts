@@ -114,7 +114,7 @@ export class GalleryStack extends cdk.Stack {
 
     // Grant permissions
     imageBucket.grantReadWrite(logImageFn);
-    imageBucket.grantRead(removeImageFn);
+    imageBucket.grantReadWrite(removeImageFn);
     imageTable.grantReadWriteData(logImageFn);
     imageTable.grantReadWriteData(addMetadataFn);
     imageTable.grantReadWriteData(updateStatusFn);
@@ -167,19 +167,6 @@ export class GalleryStack extends cdk.Stack {
           }),
           status: sns.SubscriptionFilter.stringFilter({
             allowlist: ['approved', 'rejected'],
-          }),
-        },
-      })
-    );
-
-    imageTopic.addSubscription(
-      new subscriptions.LambdaSubscription(confirmationMailerFn, {
-        filterPolicy: {
-          eventType: sns.SubscriptionFilter.stringFilter({
-            allowlist: ['notification'],
-          }),
-          notificationType: sns.SubscriptionFilter.stringFilter({
-            allowlist: ['email'],
           }),
         },
       })

@@ -1,5 +1,5 @@
 import { SES } from 'aws-sdk';
-import { handler, sendEmail, NotificationEvent } from './index';
+import { handler, sendEmail } from './index';
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => {
@@ -28,23 +28,20 @@ describe('Confirmation Mailer Lambda', () => {
     process.env = OLD_ENV;
   });
 
-  it('should send email with valid event', async () => {
-    const validEvent: NotificationEvent = {
-      imageId: 'test-image-1',
-      status: 'approved',
-      eventType: 'notification',
-      notificationType: 'email'
-    };
-
-    const snsEvent = {
+  it('should send email with valid DynamoDB record', async () => {
+    const dynamoDbEvent = {
       Records: [{
-        Sns: {
-          Message: JSON.stringify(validEvent)
+        eventName: 'MODIFY',
+        dynamodb: {
+          NewImage: {
+            id: { S: 'test-image-1' },
+            status: { S: 'approved' }
+          }
         }
       }]
     };
 
-    await handler(snsEvent as any, {} as any);
+    await handler(dynamoDbEvent as any, {} as any);
 
     expect(mockSendEmail).toHaveBeenCalledWith({
       Destination: {
@@ -66,82 +63,21 @@ describe('Confirmation Mailer Lambda', () => {
     });
   });
 
-  it('should send email with custom recipient', async () => {
-    const eventWithEmail: NotificationEvent = {
-      imageId: 'test-image-2',
-      status: 'rejected',
-      email: 'custom@example.com',
-      eventType: 'notification',
-      notificationType: 'email'
-    };
-
-    const snsEvent = {
+  it('should skip non-MODIFY events', async () => {
+    const dynamoDbEvent = {
       Records: [{
-        Sns: {
-          Message: JSON.stringify(eventWithEmail)
+        eventName: 'INSERT',
+        dynamodb: {
+          NewImage: {
+            id: { S: 'test-image-1' },
+            status: { S: 'approved' }
+          }
         }
       }]
     };
 
-    await handler(snsEvent as any, {} as any);
-
-    expect(mockSendEmail).toHaveBeenCalledWith({
-      Destination: {
-        ToAddresses: ['custom@example.com']
-      },
-      Message: {
-        Body: {
-          Html: {
-            Charset: 'UTF-8',
-            Data: expect.stringContaining('rejected')
-          }
-        },
-        Subject: {
-          Charset: 'UTF-8',
-          Data: expect.stringContaining('test-image-2')
-        }
-      },
-      Source: 'eda-lab-a@yuzhes.com'
-    });
-  });
-
-  it('should include reason in email when provided', async () => {
-    const eventWithReason: NotificationEvent = {
-      imageId: 'test-image-3',
-      status: 'rejected',
-      reason: 'Image quality is poor',
-      eventType: 'notification',
-      notificationType: 'email'
-    };
-
-    const snsEvent = {
-      Records: [{
-        Sns: {
-          Message: JSON.stringify(eventWithReason)
-        }
-      }]
-    };
-
-    await handler(snsEvent as any, {} as any);
-
-    expect(mockSendEmail).toHaveBeenCalledWith({
-      Destination: {
-        ToAddresses: ['eda-lab-b@yuzhes.com']
-      },
-      Message: {
-        Body: {
-          Html: {
-            Charset: 'UTF-8',
-            Data: expect.stringContaining('Image quality is poor')
-          }
-        },
-        Subject: {
-          Charset: 'UTF-8',
-          Data: expect.stringContaining('test-image-3')
-        }
-      },
-      Source: 'eda-lab-a@yuzhes.com'
-    });
+    await handler(dynamoDbEvent as any, {} as any);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it('should handle SES send email errors', async () => {
@@ -149,21 +85,18 @@ describe('Confirmation Mailer Lambda', () => {
       promise: jest.fn().mockRejectedValue(new Error('SES error'))
     });
 
-    const validEvent: NotificationEvent = {
-      imageId: 'test-image-1',
-      status: 'approved',
-      eventType: 'notification',
-      notificationType: 'email'
-    };
-
-    const snsEvent = {
+    const dynamoDbEvent = {
       Records: [{
-        Sns: {
-          Message: JSON.stringify(validEvent)
+        eventName: 'MODIFY',
+        dynamodb: {
+          NewImage: {
+            id: { S: 'test-image-1' },
+            status: { S: 'approved' }
+          }
         }
       }]
     };
 
-    await expect(handler(snsEvent as any, {} as any)).rejects.toThrow('SES error');
+    await expect(handler(dynamoDbEvent as any, {} as any)).rejects.toThrow('SES error');
   });
 }); 
