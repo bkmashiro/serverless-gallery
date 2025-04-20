@@ -9,7 +9,8 @@
     "watch": "tsc -w",
     "test": "jest",
     "test:watch": "jest --watch",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "destroy": "cdk destroy"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.147",
