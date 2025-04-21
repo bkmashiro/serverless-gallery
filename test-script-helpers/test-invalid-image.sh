@@ -12,25 +12,25 @@ if [ -z "$BUCKET_NAME" ] || [ -z "$TABLE_NAME" ] || [ -z "$DLQ_URL" ]; then
     exit 1
 fi
 
-# 1. 创建一个无效的文本文件
+# 1. Create an invalid text file
 echo "This is an invalid image file" > invalid-image.txt
 
-# 2. 上传无效文件到 S3
+# 2. Upload invalid file to S3
 echo "Uploading invalid file to S3 bucket: $BUCKET_NAME"
 aws s3 cp invalid-image.txt s3://$BUCKET_NAME/
 
-# 3. 等待一段时间，让消息进入死信队列
+# 3. Wait for message to be moved to DLQ
 echo "Waiting for message to be processed and moved to DLQ..."
 sleep 30
 
-# 4. 检查死信队列中的消息
+# 4. Check messages in DLQ
 echo "Checking messages in DLQ:"
 aws sqs receive-message \
     --queue-url "$DLQ_URL" \
     --max-number-of-messages 10 \
     --output json
 
-# 5. 调用删除 Lambda 函数
+# 5. Invoke remove-image Lambda function
 echo "Invoking remove-image Lambda function..."
 aws lambda invoke \
     --function-name gallery-remove-image \
@@ -43,11 +43,11 @@ cat response.json
 rm response.json
 echo ""
 
-# 6. 检查文件是否已被删除
+# 6. Check if file was removed
 echo "Checking if file was removed from S3:"
 echo "=== begin ls s3://$BUCKET_NAME/ ==="
 aws s3 ls s3://$BUCKET_NAME/invalid-image.txt
 echo "=== end ls s3://$BUCKET_NAME/ ==="
 
-# 7. 清理本地文件
+# 7. Cleanup local files
 rm invalid-image.txt 

@@ -4,7 +4,7 @@
 
 **Name:** Yuzhe Shi (20108862@mail.wit.ie)
 
-**Demo:** [YouTube Demo Link]
+**Demo:** [https://youtu.be/dMAT0ee9UVY](https://youtu.be/dMAT0ee9UVY)
 
 This repository contains the implementation of a serverless photo gallery application using an event-driven architecture on AWS. The application is built using AWS CDK for infrastructure provisioning and TypeScript for implementation.
 

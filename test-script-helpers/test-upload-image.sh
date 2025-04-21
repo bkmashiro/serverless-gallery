@@ -12,29 +12,29 @@ if [ -z "$BUCKET_NAME" ] || [ -z "$TABLE_NAME" ]; then
     exit 1
 fi
 
-# 1. 清理：确保没有遗留的测试文件
+# 1. Cleanup: ensure no leftover test files
 echo "Cleaning up any existing test files..."
 aws s3 rm s3://$BUCKET_NAME/test-image.png
 
-# 2. 上传图片到 S3
+# 2. Upload image to S3
 echo "Uploading image to S3 bucket: $BUCKET_NAME"
 aws s3 cp ../images/test-image.png s3://$BUCKET_NAME/
 
-# 3. 检查 S3 中的文件
+# 3. Check files in S3
 echo "Listing files in S3 bucket:"
 aws s3 ls s3://$BUCKET_NAME/
 
-# 4. 等待 Lambda 处理
+# 4. Wait for Lambda processing
 echo "Waiting for Lambda to process the image..."
 sleep 10
 
-# 5. 检查 DynamoDB 中的记录
+# 5. Check image metadata in DynamoDB
 echo "Checking image metadata in DynamoDB table: $TABLE_NAME"
 aws dynamodb get-item \
     --table-name "$TABLE_NAME" \
     --key '{"id": {"S": "test-image.png"}}' \
     --output json
 
-# 6. 清理：删除测试文件
+# 6. Cleanup: remove test file
 echo "Cleaning up: removing test file from S3"
 aws s3 rm s3://$BUCKET_NAME/test-image.png

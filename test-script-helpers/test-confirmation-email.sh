@@ -12,15 +12,15 @@ if [ -z "$BUCKET_NAME" ] || [ -z "$TABLE_NAME" ]; then
     exit 1
 fi
 
-# 1. 上传测试图片
+# 1. Upload test image
 echo "Uploading test image to S3 bucket: $BUCKET_NAME"
 aws s3 cp ../images/test-image.png s3://$BUCKET_NAME/
 
-# 2. 等待 Lambda 处理
+# 2. Wait for Lambda processing
 echo "Waiting for Lambda to process the image..."
 sleep 10
 
-# 3. 更新 DynamoDB 记录以触发 Stream
+# 3. Update DynamoDB record to trigger Stream
 echo "Updating DynamoDB record to trigger Stream"
 aws dynamodb update-item \
     --table-name "$TABLE_NAME" \
@@ -32,10 +32,10 @@ aws dynamodb update-item \
         ":email": {"S": "20108862@mail.wit.ie"}
     }'
 
-# 4. 等待 Lambda 处理
+# 4. Wait for Lambda processing
 echo "Waiting for Lambda to process notification..."
 sleep 10
 
-# 5. 清理：删除测试文件
+# 5. Cleanup: remove test file
 echo "Cleaning up: removing test file from S3"
 aws s3 rm s3://$BUCKET_NAME/test-image.png

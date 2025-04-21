@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 加载环境变量
+# Load environment variables
 if [ -f .env ]; then
     source .env
 else
@@ -8,18 +8,18 @@ else
     exit 1
 fi
 
-# 检查必要的环境变量
+# Check required environment variables
 if [ -z "$TOPIC_ARN" ] || [ -z "$TABLE_NAME" ] || [ -z "$BUCKET_NAME" ]; then
     echo "Error: Required environment variables not set"
     exit 1
 fi
 
-# 颜色定义
+# Color definitions
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# 打印带颜色的消息
+# Print colored messages
 print_success() {
     echo -e "${GREEN}✓ $1${NC}"
 }
@@ -28,12 +28,12 @@ print_error() {
     echo -e "${RED}✗ $1${NC}"
 }
 
-# 创建临时消息文件
+# Create temporary message files
 create_message_files() {
     local metadata_type=$1
     local value=$2
     
-    # 创建消息体
+    # Create message body
     cat > message.json << EOF
 {
     "id": "test-image.png",
@@ -41,7 +41,7 @@ create_message_files() {
 }
 EOF
 
-    # 创建消息属性
+    # Create message attributes
     cat > attributes.json << EOF
 {
     "metadata_type": {
@@ -56,7 +56,7 @@ EOF
 EOF
 }
 
-# 清理临时文件和 S3 对象
+# Cleanup temporary files and S3 objects
 cleanup() {
     rm -f message.json attributes.json
     echo "Cleaning up test image from S3..."
@@ -64,12 +64,12 @@ cleanup() {
     print_success "Cleanup completed"
 }
 
-# 上传测试图片
+# Upload test image
 upload_test_image() {
     echo "Uploading test image to S3..."
     if aws s3 cp ../images/test-image.png s3://$BUCKET_NAME/; then
         print_success "Image uploaded successfully"
-        # 等待 Lambda 处理
+        # Wait for Lambda processing
         echo "Waiting for Lambda to process the image..."
         sleep 10
     else
@@ -78,7 +78,7 @@ upload_test_image() {
     fi
 }
 
-# 获取并显示 DynamoDB 记录
+# Get and display DynamoDB record
 get_dynamodb_record() {
     echo "Current DynamoDB record:"
     aws dynamodb get-item \
@@ -87,17 +87,17 @@ get_dynamodb_record() {
         --output json
 }
 
-# 测试添加元数据
+# Test adding metadata
 test_add_metadata() {
     local metadata_type=$1
     local value=$2
     
     echo "Testing adding $metadata_type metadata..."
     
-    # 创建消息文件
+    # Create message files
     create_message_files "$metadata_type" "$value"
     
-    # 发布消息到 SNS
+    # Publish message to SNS
     if aws sns publish \
         --topic-arn "$TOPIC_ARN" \
         --message-attributes file://attributes.json \
@@ -108,11 +108,11 @@ test_add_metadata() {
         return 1
     fi
     
-    # 等待 Lambda 处理
+    # Wait for Lambda processing
     echo "Waiting for Lambda to process the metadata..."
     sleep 10
     
-    # 检查 DynamoDB 中的记录
+    # Check record in DynamoDB
     echo "Checking DynamoDB record..."
     get_dynamodb_record
     
@@ -127,47 +127,47 @@ test_add_metadata() {
     fi
 }
 
-# 主测试流程
+# Main test process
 main() {
     echo "Starting metadata tests..."
     
-    # 确保在脚本退出时清理
+    # Ensure cleanup on script exit
     trap cleanup EXIT
     
-    # 上传测试图片
+    # Upload test image
     if ! upload_test_image; then
         print_error "Failed to upload test image"
         exit 1
     fi
     
-    # 显示初始记录
+    # Display initial record
     echo "Initial DynamoDB record:"
     get_dynamodb_record
     
-    # 测试添加标题
+    # Test adding caption
     if ! test_add_metadata "Caption" "Yuzhe Shi"; then
         print_error "Caption test failed"
         exit 1
     fi
     
-    # 测试添加日期
+    # Test adding date
     if ! test_add_metadata "Date" "2025-04-20"; then
         print_error "Date test failed"
         exit 1
     fi
     
-    # 测试添加摄影师姓名
+    # Test adding photographer name
     if ! test_add_metadata "Name" "Shimizu Nagisa"; then
         print_error "Name test failed"
         exit 1
     fi
     
-    # 显示最终记录
+    # Display final record
     echo "Final DynamoDB record:"
     get_dynamodb_record
     
     print_success "All metadata tests completed successfully!"
 }
 
-# 运行主测试
+# Run main test
 main 
